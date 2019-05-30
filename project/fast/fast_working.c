@@ -294,7 +294,7 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
             rational b1;
             rational B1;
 
-            if(n1 <= 0 || n2 <= n1){
+            if((n1 <= 0 || n2 <= n1) && n2 == r) {
                 free_all(T, q, r, s);
                 return true;
             }
