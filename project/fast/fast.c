@@ -47,7 +47,7 @@ rational_t *new_rational(long p, long q)
 {
 	rational_t* r = get_from_free();
 	if(r == NULL)
-		r=calloc(1, sizeof(rational_t));
+		r=malloc(sizeof(rational_t));
 	
 	r->p=p;
 	r->q=q;
@@ -84,7 +84,7 @@ void reduce(rational_t* r)
 	r->p = sign * (r->p);
 	r->q = sign * (r->q);
 	
-	if(p==1){
+	if(p == 1){
 		return;
 	}
 	
@@ -210,6 +210,8 @@ void free_all(rational_t*** T, rational_t** q, size_t r, size_t s)
  */
 bool make_solution(rational_t** q, rational_t* b1, rational_t* B1, int n2, size_t r)
 {
+	//printf("b1 = %ld/%ld, b2 = %lld/%lld\n", b1->p, b1->q, B1->p, B1->q);
+
 	if(compare_r(b1, B1)){
 		return false;
 	}
@@ -239,11 +241,11 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
     int n1 = 0;
     int n2 = 0;
 
-    T = calloc(r, sizeof(rational_t**));
+    T = malloc(r * sizeof(rational_t**));
 	for(size_t i = 0; i < r; i++){
-		T[i] = calloc(s, sizeof(rational_t*));
+		T[i] = malloc(s * sizeof(rational_t*));
 	}
-	q = calloc(r, sizeof(rational_t*));
+	q = malloc(r * sizeof(rational_t*));
 
     for(size_t i = 0; i < rows; i++){
 		for(size_t j = 0; j < cols; j++){
@@ -268,7 +270,7 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
 
 		n2 += n1;
 
-        /* Sort the inequalities */
+        /* Sort the inequalities in this scope */
         {
 			int cpos = 0;
 			int cneg = 0;
@@ -342,12 +344,13 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
             T[i][s - 1]->q = 1; 
         }
 
+		/* The problem has been reduced to only one variable */
         if(s == 1){
             rational_t b1;
             rational_t B1;
 
 			
-
+			/* There is no upper bound or lower bound */
             if((n1 <= 0 || n2 <= n1) && r == n2){
                 free_all(T, q, r, s);
                 return true;
@@ -362,14 +365,14 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
 			B1.q = q[n1]->q;
 
 			for(int i = 1; i < n1; i++){
-				if(!compare_r(q[i], &b1)){
+				if(compare_r(&b1, q[i])){
 					b1.p = q[i]->p;
 					b1.q = q[i]->q;
 				}
 			}
 
 			for(int i = n1 + 1; i < n2; i++){
-				if(!compare_r(&B1, q[i])){
+				if(compare_r(q[i], &B1)){
 					B1.p = q[i]->p;
 					B1.q = q[i]->q;
 				}
@@ -391,14 +394,15 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
         rational_t*** oldT = T;
         rational_t** oldq = q;
 
-        T = calloc(rprime, sizeof(rational_t**));
+        T = malloc(rprime * sizeof(rational_t**));
 	    for(size_t i = 0; i < rprime; i++){
-		    T[i] = calloc(s - 1, sizeof(rational_t*));
+		    T[i] = malloc((s - 1) * sizeof(rational_t*));
 	    }
-	    q = calloc(rprime, sizeof(rational_t*));
+	    q = malloc(rprime * sizeof(rational_t*));
 
         int m = 0;
 
+		/* Mathemagics */
         for(int k = 0; k < n1; k++){
 			for(int i = n1; i < n2; i++){
 				for(size_t j = 0; j < s - 1; j++){
