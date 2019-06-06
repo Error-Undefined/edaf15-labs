@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <limits.h>
+#include <math.h>
+
+#define ever (;;) 
 
 typedef struct rational_t rational_t;
 
@@ -12,7 +15,32 @@ struct rational_t {
 	rational_t* next;
 };
 
+typedef struct arena_t arena_t;
+
+struct arena_t {
+	char* current;
+	char* buffer;
+	size_t size;
+};
+
 rational_t* head_of_free; /* Hold the freelist */
+
+void* arena_alloc(arena_t* arena, size_t size)
+{
+	size_t remains;
+	void* data;
+	
+	remains=arena->size - (arena->current - arena->buffer);
+	if(size>remains){
+		printf("Not enough memory in arena\n");
+		exit(1);
+	}
+	data=arena->current;
+	arena->current+=size;
+
+	
+	return data;
+}
 
 /**
  * Add a node to the head of the freelist.
@@ -43,11 +71,11 @@ rational_t *get_from_free()
 /**
  * Creates a new rational_t on the heap.
  */
-rational_t *new_rational(long p, long q)
+static inline rational_t *new_rational(long p, long q, arena_t* arena_ptr)
 {
 	rational_t* r = get_from_free();
 	if(r == NULL)
-		r=malloc(sizeof(rational_t));
+		r=arena_alloc(arena_ptr, sizeof(rational_t));
 	
 	r->p=p;
 	r->q=q;
@@ -58,14 +86,9 @@ rational_t *new_rational(long p, long q)
 /**
  * Reduces the rational_t r to its lowest factors.
  */
-void reduce(rational_t* r)
+static inline void reduce(rational_t* r)
 {
-	if(r->p == 0){
-        r->q = 1;
-        return;
-    }
-
-	int sign=-1;
+	int sign = -1;
 	
 	if((r->p > 0 && r->q > 0)||(r->p < 0 && r->q < 0)){
 		sign = 1;
@@ -74,19 +97,17 @@ void reduce(rational_t* r)
 	long long p = (r->p > 0) ? r->p : -(r->p);
 	long long q = (r->q > 0) ? r->q : -(r->q);
 	
+
+	long long t;
 	while(q != 0)
 	{
-		long long t = q;
+		t = q;
 		q = p % q;
 		p = t;
 	}
 	
 	r->p = sign * (r->p);
-	r->q = sign * (r->q);
-	
-	if(p == 1){
-		return;
-	}
+	r->q = sign * (r->q);	
 	
 	r->p = (r->p)/p;
 	r->q = (r->q)/p;
@@ -95,27 +116,25 @@ void reduce(rational_t* r)
 /**
  * Subtracts the rationals r1 and r2, stores the result in r1.
  */
-void subq(rational_t* r1,rational_t* r2)
+static inline void subq(rational_t* r1,rational_t* r2)
 {
 	r1->p =(r1->p)*(r2->q)-(r2->p)*(r1->q);
 	r1->q *= r2->q;
-	reduce(r1);
 }
 
 /**
  * Subtracts the rational_t r2 from r1, gives the result in a new rational_t pointer.
  */
-rational_t *subq_n(rational_t* r1, rational_t* r2)
+static inline rational_t *subq_n(rational_t* r1, rational_t* r2, arena_t* arena)
 {
-	rational_t* r = new_rational((r1->p)*(r2->q)-(r2->p)*(r1->q), (r1->q)*(r2->q));
-	reduce(r);
+	rational_t* r = new_rational((r1->p)*(r2->q)-(r2->p)*(r1->q), (r1->q)*(r2->q), arena);
 	return r;
 }
 
 /**
  * Multiplies the rational_t r with the factor f
  */
-void const_mulq(rational_t* r, int factor)
+static inline void const_mulq(rational_t* r, int factor)
 {
 	r->p = r->p * factor;
 }
@@ -123,17 +142,19 @@ void const_mulq(rational_t* r, int factor)
 /**
  * Divides the rationals r1 and r2, stores the result in r1.
  */
-void divq(rational_t* r1,rational_t* r2)
+static inline void divq(rational_t* r1,rational_t* r2)
 {
+	int reduce_lim = 500000;
 	r1->p *= r2->q;
 	r1->q *= r2->p;
-	reduce(r1);
+	if(r1->p > reduce_lim || r1->q > reduce_lim || r1->p < -reduce_lim || r1->q < -reduce_lim)
+		reduce(r1);
 }
 
 /**
  * Gives the sign of the rational_t r, or 0 if it is 0.
  */
-int sign(rational_t* r)
+static inline int sign(rational_t* r)
 {
 	if(r->p == 0){
 		return 0;
@@ -147,7 +168,7 @@ int sign(rational_t* r)
 /**
  * Returns true if p1 is strictly greater to r2.
  */ 
-bool compare_r(rational_t* r1, rational_t* r2)
+static inline bool compare_r(rational_t* r1, rational_t* r2)
 {
 	rational_t r;
 	r.p = r1->p;
@@ -170,40 +191,8 @@ void free_to_freelist(rational_t*** T, rational_t** q, size_t r, size_t s)
         }
         add_to_free(q[i]);
     }
-
-	for(size_t i = 0; i < r; i++){
-        free(T[i]);
-    }
-    free(T);
-    free(q);
 }
 
-/**
- * Frees T and q.
- */
-void free_all(rational_t*** T, rational_t** q, size_t r, size_t s)
-{
-    for(size_t i = 0; i < r; i++){
-        for(size_t j = 0; j < s; j++){
-            free(T[i][j]);
-        }
-        free(q[i]);
-    }
-
-    for(size_t i = 0; i < r; i++){
-        free(T[i]);
-    }
-    free(T);
-    free(q);
-	while(head_of_free->next != NULL)
-	{
-		rational_t* r = head_of_free->next;
-		head_of_free->next = r->next;
-		free(r);	
-	}
-
-	free(head_of_free);
-}
 
 /**
  * Makes the solution, on the premise that b1 > B1 gives false
@@ -216,11 +205,6 @@ bool make_solution(rational_t** q, rational_t* b1, rational_t* B1, int n2, size_
 		return false;
 	}
 
-    for(size_t i = n2; i < r; i++){
-        if(sign(q[i]) == 1){
-            return false;
-        }
-    }
     return true;
 }
 
@@ -229,7 +213,23 @@ bool make_solution(rational_t** q, rational_t* b1, rational_t* B1, int n2, size_
  */
 bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows])
 {
-	head_of_free = malloc(sizeof(rational_t));
+	/* One total elimination makes at most 4*(rows*rows)^cols iterations */
+	size_t arenasize = (size_t)  8 * pow(rows * rows , cols) + 200; 
+	
+	char mem[arenasize]; /* Use a VLA for the arena */
+
+	arena_t arena_struct;
+	
+	arena_t* arena_ptr = &arena_struct;
+
+	arena_ptr->buffer = &(mem[0]);
+	arena_ptr->current=arena_ptr->buffer;
+	arena_ptr->size=arenasize - 1;
+
+	rational_t headrational;
+	head_of_free = &headrational;
+	head_of_free->p = 0;
+	head_of_free->q = 0;
 	head_of_free->next = NULL;
 
     rational_t*** T;
@@ -241,20 +241,20 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
     int n1 = 0;
     int n2 = 0;
 
-    T = malloc(r * sizeof(rational_t**));
+    T = arena_alloc(arena_ptr, r * sizeof(rational_t**));
 	for(size_t i = 0; i < r; i++){
-		T[i] = malloc(s * sizeof(rational_t*));
+		T[i] = arena_alloc(arena_ptr, s * sizeof(rational_t*));
 	}
-	q = malloc(r * sizeof(rational_t*));
+	q = arena_alloc(arena_ptr, r * sizeof(rational_t*));
 
     for(size_t i = 0; i < rows; i++){
 		for(size_t j = 0; j < cols; j++){
-			T[i][j] = new_rational(a[i][j], 1);
+			T[i][j] = new_rational(a[i][j], 1, arena_ptr);
 		}
-        q[i] = new_rational(c[i], 1);
+        q[i] = new_rational(c[i], 1, arena_ptr);
 	}
 
-    while(1)
+    for ever
     {
         n1 = 0;
         n2 = 0;
@@ -351,8 +351,8 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
 
 			
 			/* There is no upper bound or lower bound */
-            if((n1 <= 0 || n2 <= n1) && r == n2){
-                free_all(T, q, r, s);
+			size_t tempn2 = n2;
+            if((n1 <= 0 || n2 <= n1) && r == tempn2){
                 return true;
             }
 
@@ -379,26 +379,23 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
 			}
 
             bool result = make_solution(q, &B1, &b1, n2, r);
-            free_all(T, q, r, s);
-
             return result;
         }
 
         /* Create rprime and new inequalities */
         int rprime = r - n2 + n1 * (n2 - n1);
         if(rprime == 0){
-            free_all(T, q, r, s);
-            return true;
+		    return true;
         }
 
         rational_t*** oldT = T;
         rational_t** oldq = q;
 
-        T = malloc(rprime * sizeof(rational_t**));
-	    for(size_t i = 0; i < rprime; i++){
-		    T[i] = malloc((s - 1) * sizeof(rational_t*));
+        T = arena_alloc(arena_ptr, rprime * sizeof(rational_t**));
+	    for(size_t i = 0; i < (size_t) rprime; i++){
+		    T[i] = arena_alloc(arena_ptr, (s - 1) * sizeof(rational_t*));
 	    }
-	    q = malloc(rprime * sizeof(rational_t*));
+	    q = arena_alloc(arena_ptr, rprime * sizeof(rational_t*));
 
         int m = 0;
 
@@ -406,19 +403,19 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
         for(int k = 0; k < n1; k++){
 			for(int i = n1; i < n2; i++){
 				for(size_t j = 0; j < s - 1; j++){
-					T[m][j] = subq_n(oldT[k][j], oldT[i][j]);
+					T[m][j] = subq_n(oldT[k][j], oldT[i][j], arena_ptr);
 				}
-    			q[m] = subq_n(oldq[k], oldq[i]);
+    			q[m] = subq_n(oldq[k], oldq[i], arena_ptr);
 				m++;
 			}
 		}
 
         /* Bring back the zero coeff */
-        for(int i = n2; i < r; i++){
+        for(size_t i = n2; i < r; i++){
             for(size_t j = 0; j < s - 1; j++){
-                T[m][j] = new_rational(oldT[i][j]->p, oldT[i][j]->q);
+                T[m][j] = new_rational(oldT[i][j]->p, oldT[i][j]->q, arena_ptr);
             }
-            q[m] = new_rational(oldq[i]->p, oldq[i]->q);
+            q[m] = new_rational(oldq[i]->p, oldq[i]->q, arena_ptr);
             m++;
         }        
 
