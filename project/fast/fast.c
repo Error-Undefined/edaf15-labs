@@ -1,9 +1,11 @@
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
 
 #define ever (;;)
 
+/* A struct that holds a rational number and a reference to another for a freelist */
 typedef struct rational_t rational_t;
 
 /* A struct that holds a rational number and a reference to another for a freelist */
@@ -14,6 +16,7 @@ struct rational_t
 	rational_t *next;
 };
 
+/* A simple arena */
 typedef struct arena_t arena_t;
 
 /* A simple arena */
@@ -42,9 +45,6 @@ static inline void *arena_alloc(arena_t *arena, size_t size)
  */
 static inline void add_to_free(rational_t *r)
 {
-	if (r == NULL)
-		return;
-
 	r->next = head_of_free->next;
 	head_of_free->next = r;
 }
@@ -106,9 +106,11 @@ static inline void reduce(rational_t *r)
 		sign = -1;
 	}
 
-	long long p = (r->p > 0) ? r->p : -(r->p);
-	long long q = (r->q > 0) ? r->q : -(r->q);
+	r->p = (r->p > 0) ? r->p : -(r->p);
+	r->q = (r->q > 0) ? r->q : -(r->q);
 
+	long long p = r->p;
+	long long q = r->q;
 	long long t;
 	while (q != 0)
 	{
@@ -117,11 +119,12 @@ static inline void reduce(rational_t *r)
 		p = t;
 	}
 
-	r->p = sign * (r->p);
-	r->q = sign * (r->q);
 
-	r->p = (r->p) / p;
-	r->q = (r->q) / p;
+	r->p = r->p / p;
+	r->q = r->q / p;
+
+	r->p = sign * (r->p);
+	r->q = (r->q);
 }
 
 /**
@@ -160,13 +163,14 @@ static inline void divq(rational_t *r1, rational_t *r2)
  */
 static inline int sign(rational_t *r)
 {
-	if (r->p == 0)
-	{
-		return 0;
-	}
+
 	if ((r->p > 0 && r->q > 0) || (r->p < 0 && r->q < 0))
 	{
 		return 1;
+	}
+	if (r->p == 0)
+	{
+		return 0;
 	}
 	return -1;
 }
@@ -192,8 +196,6 @@ static inline bool compare_r(rational_t *r1, rational_t *r2)
  */
 static inline bool make_solution(rational_t *b1, rational_t *B1)
 {
-	//printf("b1 = %ld/%ld, b2 = %lld/%lld\n", b1->p, b1->q, B1->p, B1->q);
-
 	if (compare_r(b1, B1))
 	{
 		return false;
@@ -256,7 +258,7 @@ static inline void sort(int n1, int n2, size_t r, size_t s, rational_t ***T, rat
 bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows])
 {
 	/* One total elimination makes at most 4*(rows*rows)^cols iterations */
-	size_t arenasize = (size_t)8 * pow(rows * rows, cols) + 200;
+	size_t arenasize = (size_t) 8 * pow(rows * rows, cols) + 200;
 
 	char mem[arenasize]; /* Use a VLA for the arena */
 
@@ -270,6 +272,7 @@ bool fm(size_t rows, size_t cols, signed char a[rows][cols], signed char c[rows]
 
 	rational_t headrational;
 	head_of_free = &headrational;
+
 	head_of_free->p = 0;
 	head_of_free->q = 0;
 	head_of_free->next = NULL;
