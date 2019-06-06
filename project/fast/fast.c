@@ -4,6 +4,7 @@
 #include <math.h>
 
 #define ever (;;)
+#define REDUCE_LIM (550000)
 
 /* A struct that holds a rational number and a reference to another for a freelist */
 typedef struct rational_t rational_t;
@@ -150,11 +151,11 @@ static inline rational_t *subq_n(rational_t *r1, rational_t *r2, arena_t *arena)
  */
 static inline void divq(rational_t *r1, rational_t *r2)
 {
-	int reduce_lim = 550000;
+	
 	r1->p *= r2->q;
 	r1->q *= r2->p;
 
-	if (r1->p > reduce_lim || r1->q > reduce_lim || r1->p < -reduce_lim || r1->q < -reduce_lim)
+	if (r1->p > REDUCE_LIM || r1->q > REDUCE_LIM || r1->p < -REDUCE_LIM || r1->q < -REDUCE_LIM)
 		reduce(r1);
 }
 
